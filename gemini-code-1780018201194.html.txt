@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global English Radio - Ver.22.5 (Fix Approved)</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background: #0d1117;
+            color: #58a6ff;
+            padding: 20px;
+            margin: 0;
+            display: grid;
+            grid-template-columns: 300px 1fr 0px;
+            grid-template-rows: auto 1fr;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+            user-select: none;
+            -webkit-user-select: none;
+            transition: grid-template-columns 0.4s ease;
+        }
+        
+        body.admin-layout {
+            grid-template-columns: 300px 1fr 400px;
+        }
+        
+        .left-column {
+            grid-column: 1;
+            grid-row: 1 / 3;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .main-panel {
+            grid-column: 2;
+            grid-row: 2;
+            background: #161b22;
+            padding: 25px;
+            border-radius: 10px;
+            border: 2px solid #30363d;
+            text-align: center;
+        }
+
+        .rx-box {
+            grid-column: 2;
+            grid-row: 1;
+            background: #0d1117;
+            border: 2px dashed #30363d;
+            border-radius: 10px;
+            padding: 15px;
+            min-height: 80px;
+            position: relative;
+            transition: 0.3s;
+        }
+        .rx-box.receiving { border-color: #50fa7b; box-shadow: 0 0 15px rgba(80, 250, 123, 0.2); }
+        .rx-box.admin-intercept { border-color: #ff3366; box-shadow: 0 0 20px rgba(255, 51, 102, 0.3); }
+        
+        .rx-title {
+            position: absolute;
+            top: -10px; left: 15px;
+            background: #0d1117; padding: 0 5px;
+            color: #8b949e; font-size: 12px; font-weight: bold;
+        }
+        #rxMessage { font-size: 24px; color: #fff; font-weight: bold; margin-top: 10px; letter-spacing: 1px; word-break: break-all; }
+
+        .admin-panel {
+            grid-column: 3;
+            grid-row: 1 / 3;
+            background: #161b22;
+            border: 2px solid #ff3366;
+            border-radius: 10px;
+            padding: 15px;
+            display: none;
+            flex-direction: column;
+            box-shadow: 0 0 20px rgba(255, 51, 102, 0.15);
+            overflow: hidden;
+        }
+        .admin-panel.show { display: flex; }
+        .admin-table-wrapper {
+            flex: 1;
+            overflow-y: auto;
+            margin-top: 10px;
+            border: 1px solid #30363d;
+            background: #0d1117;
+            border-radius: 5px;
+        }
+        .admin-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+        .admin-table th { background: #21262d; color: #ff3366; padding: 8px; position: sticky; top: 0; border-bottom: 2px solid #30363d; }
+        .admin-table td { padding: 8px; border-bottom: 1px solid #21262d; color: #c9d1d9; word-break: break-all; }
+        .admin-table tr:hover { background: rgba(255, 51, 102, 0.05); }
+        .tag-route { background: #ff3366; color: #fff; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px; letter-spacing: 1px; }
+
+        .box { background: #161b22; padding: 15px; border-radius: 10px; border: 2px solid #30363d; }
+        h3 { color: #58a6ff; font-size: 14px; margin-top: 0; border-bottom: 1px solid #30363d; padding-bottom: 5px; }
+        
+        .tip-list { font-size: 12px; color: #8b949e; margin: 0; padding-left: 20px; line-height: 1.6; }
+        .tip-list li strong { color: #ff79c6; }
+
+        .my-id-display {
+            font-size: 26px; font-weight: bold; color: #00ffcc; text-align: center;
+            background: #0d1117; padding: 10px; border-radius: 5px; border: 1px solid #00ffcc;
+            letter-spacing: 3px; text-shadow: 0 0 8px rgba(0,255,204,0.3);
+        }
+        .my-id-display.admin-mode { color: #ff3366; border-color: #ff3366; text-shadow: 0 0 12px #ff3366; }
+        
+        .target-display-box {
+            display: flex; justify-content: center; align-items: center; gap: 5px;
+            font-size: 32px; font-weight: bold; color: #8b949e; background: #0d1117;
+            padding: 10px; border-radius: 5px; border: 2px solid #30363d; max-width: 300px; margin: 10px auto 0 auto;
+            font-family: monospace; letter-spacing: 2px;
+        }
+        .target-digit { width: 30px; text-align: center; color: #30363d; transition: 0.2s; cursor: pointer; border-bottom: 1px dashed transparent; }
+        .target-digit.focused { border-bottom-color: #58a6ff; color: #58a6ff; }
+        .target-digit.filled { color: #ffaa00; text-shadow: 0 0 8px #ffaa00; }
+        .target-digit.admin-filled { color: #ff3366; text-shadow: 0 0 10px #ff3366; }
+        .target-dot { color: #8b949e; }
+
+        .current-val-preview {
+            font-size: 13px; color: #adbac7; margin-bottom: 15px; font-weight: bold;
+        }
+        .current-val-preview span { color: #ff79c6; font-size: 16px; margin: 0 3px; }
+
+        /* 金庫ダイヤル構造 */
+        .vault-container {
+            position: relative; width: 240px; height: 240px; margin: 10px auto 20px auto;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .vault-indicator {
+            position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
+            font-size: 20px; color: #ff3366; z-index: 10; font-weight: bold;
+            text-shadow: 0 0 5px rgba(255,51,102,0.5);
+        }
+        .vault-dial {
+            width: 200px; height: 200px; border-radius: 50%;
+            background: radial-gradient(circle, #444c56 20%, #2d333b 60%, #1c2128 100%);
+            border: 6px solid #444c56; box-shadow: 0 0 20px rgba(0,0,0,0.6), inset 0 0 15px rgba(0,0,0,0.5);
+            cursor: pointer; position: relative; transform: rotate(0deg); touch-action: none;
+        }
+        .vault-dial::before {
+            content: ''; position: absolute; top: 15px; left: 15px; right: 15px; bottom: 15px;
+            border-radius: 50%; border: 2px dashed rgba(255,255,255,0.15); pointer-events: none;
+        }
+
+        .dial-number {
+            position: absolute; width: 30px; height: 30px; text-align: center; line-height: 30px;
+            font-size: 16px; font-weight: bold; color: #adbac7; pointer-events: none;
+        }
+        .vault-center-button {
+            position: absolute; width: 70px; height: 70px; border-radius: 50%;
+            background: radial-gradient(circle, #22272e 0%, #373e47 100%);
+            border: 4px solid #444c56; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            cursor: pointer; display: flex; justify-content: center; align-items: center;
+            color: #fff; font-size: 11px; font-weight: bold; letter-spacing: 1px; text-align: center;
+            transition: 0.1s; z-index: 5;
+        }
+        .vault-center-button:active {
+            transform: scale(0.94); box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            background: #22272e; border-color: #ffaa00;
+        }
+        .vault-center-button.admin-active { border-color: #ff3366; }
+
+        .ctrl-row {
+            display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 5px;
+        }
+        .btn-reset {
+            background: #21262d; border: 1px solid #30363d; color: #8b949e;
+            padding: 5px 15px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold;
+            transition: 0.2s;
+        }
+        .btn-reset:hover { background: #30363d; color: #fff; }
+
+        /* STUNトグルスイッチ */
+        .stun-toggle-container {
+            display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: bold; color: #8b949e;
+            background: #1f242c; padding: 4px 10px; border-radius: 4px; border: 1px solid #30363d; cursor: pointer;
+        }
+        .stun-toggle-container:hover { border-color: #444c56; }
+        .stun-indicator {
+            width: 8px; height: 8px; border-radius: 50%; background: #ff5555; box-shadow: 0 0 6px #ff5555; transition: 0.2s;
+        }
+        .stun-indicator.active { background: #50fa7b; box-shadow: 0 0 8px #50fa7b; }
+        .stun-label span { color: #fff; }
+
+        /* メッセージ入力エリア */
+        .message-input-box {
+            margin: 15px auto; width: 100%; box-sizing: border-box; background: #21262d; border: 2px solid #30363d; border-radius: 10px; padding: 15px; text-align: left;
+        }
+        .message-textarea {
+            width: 100%; box-sizing: border-box; background: #0d1117; border: 1px solid #30363d; color: #fff; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 16px; resize: vertical; margin-bottom: 8px;
+        }
+        .message-textarea::placeholder { color: #444c56; }
+        .message-textarea:disabled { background: #141414; color: #444; border-color: #222; }
+
+        .btn-send { font-size: 18px; padding: 12px 35px; cursor: pointer; background: #ff79c6; border: none; color: #fff; font-weight: bold; border-radius: 5px; width: 100%; transition: 0.2s; }
+        .btn-send:hover { background: #ff92df; }
+        .btn-send:disabled { background: #30363d !important; color: #8b949e !important; cursor: not-allowed; box-shadow: none; }
+
+        #statusLog { color: #ff5555; font-size: 14px; margin-top: 5px; font-weight: bold; min-height: 20px; }
+        #validationWarning { color: #ff5555; font-size: 12px; font-weight: bold; margin-top: -5px; margin-bottom: 8px; display: none; }
+
+        @media (max-width: 1024px) {
+            body.admin-layout { display: flex; flex-direction: column; }
+            .admin-panel { max-height: 400px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="left-column">
+    <div class="box">
+        <h3>[ Radio English Tips ]</h3>
+        <ul class="tip-list">
+            <li><strong>Roger / Copy:</strong> I understand.</li>
+            <li><strong>Over:</strong> I finished speaking.</li>
+            <li><strong>Out:</strong> Conversation finished.</li>
+            <li><strong>Say again?:</strong> Please repeat.</li>
+            <li><strong>Standby:</strong> Please wait a moment.</li>
+        </ul>
+    </div>
+
+    <div class="box">
+        <h3>[ Your Frequency ]</h3>
+        <p style="font-size: 11px; color: #8b949e; margin: 0 0 10px 0;">URLに ?admin=1 をつけて開くと…?</p>
+        <div class="my-id-display" id="myIdDisplay">---.-- MHz</div>
+    </div>
+</div>
+
+<div class="rx-box" id="rxBox">
+    <div class="rx-title" id="rxTitle">[ RECEIVER MONITOR ]</div>
+    <div id="rxStatus" style="font-size: 12px; color: #8b949e;">Connecting to network...</div>
+    <div id="rxMessage">---</div>
+</div>
+
+<div class="admin-panel" id="adminPanel">
+    <h3 style="color: #ff3366; border-color: #ff3366;">⚡ [ Global Frequency Intercept Log ]</h3>
+    <p style="font-size: 11px; color: #8b949e; margin: 5px 0 0 0;">Monitoring all international text data in real-time...</p>
+    <div class="admin-table-wrapper">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th style="width: 140px;">ROUTE (FREQ)</th>
+                    <th>DATA</th>
+                </tr>
+            </thead>
+            <tbody id="adminLogBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="main-panel">
+    <h3 style="border:none; font-size: 16px; margin-bottom: 0;">[ CRANK TUNER PANEL ]</h3>
+    <p style="font-size: 12px; color: #8b949e; margin-top: 5px;">Rotate dial and press 【LOCK IN】 to set the channel</p>
+    
+    <div class="target-display-box">
+        <div class="target-digit" id="td0" onclick="selectSlot(0)">-</div>
+        <div class="target-digit" id="td1" onclick="selectSlot(1)">-</div>
+        <div class="target-digit" id="td2" onclick="selectSlot(2)">-</div>
+        <div class="target-dot">.</div>
+        <div class="target-digit" id="td3" onclick="selectSlot(3)">-</div>
+        <div class="target-digit" id="td4" onclick="selectSlot(4)">-</div>
+        <span style="font-size: 14px; color: #8b949e; margin-left: 5px;">MHz</span>
+    </div>
+
+    <div class="current-val-preview">Dial Pointer Position: <span id="pointerPreview">0</span></div>
+
+    <div class="vault-container">
+        <div class="vault-indicator">▲</div>
+        <div class="vault-dial" id="vaultDial"></div>
+        <div class="vault-center-button" id="vaultBtn" onclick="lockDigit()">LOCK<br>IN</div>
+    </div>
+    
+    <div class="ctrl-row">
+        <button class="btn-reset" onclick="resetVault()">DIAL RESET</button>
+        <div class="stun-toggle-container" onclick="toggleStunServer()">
+            <div class="stun-indicator active" id="stunIndicator"></div>
+            <div class="stun-label">STUN: <span id="stunStatusText">ON</span></div>
+        </div>
+    </div>
+
+    <div id="statusLog">> Set your target frequency...</div>
+
+    <div class="message-input-box">
+        <div style="font-size: 12px; color: #8b949e; margin-bottom: 5px; font-weight: bold;">[ TRANSMIT BUFFER - ENGLISH ONLY ]</div>
+        <textarea id="messageInput" class="message-textarea" rows="3" placeholder="Type your English message here... (e.g., Hello, this is Tokyo Radio. Over.)" oninput="validateEnglishInput()"></textarea>
+        <div id="validationWarning">⚠️ Warning: Please use English (alphabets, numbers, symbols) only!</div>
+        <button class="btn-send" id="btnSend" onclick="transmitMessage()">電波送出 (TRANSMIT)</button>
+    </div>
+</div>
+
+<script>
+// 💡 ロジック構造を維持したまま、確実に入力文字「3164」をダイレクトに判定するセキュアモジュール
+const VirtualAuthServer = (() => {
+    // スペース等を除去してクリーンにするロジック
+    const _cleanInput = (str) => {
+        return String(str).replace(/\s+/g, ""); 
+    };
+
+    return {
+        postAuthRequest: async (rawInput) => {
+            // 元の非同期処理のラグ（通信シミュレート）を再現
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // クリーン化した入力値が「3164」であるかをダイレクト判定（ハッシュ化の不一致バグを回避）
+            if (_cleanInput(rawInput) === "3164") {
+                return { status: 200, data: { authenticated: true, role: "root_operator" } };
+            }
+            return { status: 403, data: { authenticated: false, error: "Access Denied" } };
+        }
+    };
+})();
+
+const urlParams = new URLSearchParams(window.location.search);
+const isAdminParam = urlParams.get('admin') === '1';
+let isAdmin = isAdminParam;
+let isStunEnabled = true;
+let peer = null;
+
+const myFreq = isAdmin ? "OoOoO" : String(Math.floor(10000 + Math.random() * 90000));
+
+function formatFreq(str) {
+    if (str === "OoOoO") return "OoO.oO";
+    return `${str.substring(0,3)}.${str.substring(3,5)}`;
+}
+
+function initPeerInstance() {
+    if (peer) peer.destroy();
+
+    const config = isStunEnabled ? {
+        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] }
+    } : {
+        config: { iceServers: [] }
+    };
+
+    peer = new Peer(`morse-freq-${myFreq}`, config);
+
+    peer.on('open', () => {
+        if(isAdmin) {
+            document.getElementById('rxStatus').innerText = "🛑 管理者回線：傍受スタンバイ（オールグリーン）";
+            document.getElementById('rxStatus').style.color = "#ff3366";
+            toggleAdminUI(true);
+        } else {
+            document.getElementById('rxStatus').innerText = "📡 Receiver Online (Waiting for incoming signals...)";
+            document.getElementById('rxStatus').style.color = "#50fa7b";
+        }
+    });
+
+    peer.on('connection', (conn) => {
+        conn.on('data', (data) => { processIncomingData(data); });
+    });
+}
+
+function toggleStunServer() {
+    isStunEnabled = !isStunEnabled;
+    const indicator = document.getElementById('stunIndicator');
+    const statusText = document.getElementById('stunStatusText');
+    
+    if (isStunEnabled) {
+        indicator.classList.add('active');
+        statusText.innerText = "ON";
+        document.getElementById('rxStatus').innerText = "🔄 Reconnecting STUN...";
+    } else {
+        indicator.classList.remove('active');
+        statusText.innerText = "OFF";
+        document.getElementById('rxStatus').innerText = "🛑 Disabling STUN...";
+    }
+    document.getElementById('rxStatus').style.color = "#8b949e";
+    playLockSound();
+    initPeerInstance();
+}
+
+function validateEnglishInput() {
+    const input = document.getElementById('messageInput');
+    const warning = document.getElementById('validationWarning');
+    const btnSend = document.getElementById('btnSend');
+    
+    const hasNonEnglish = /[^\x00-\x7F]/.test(input.value);
+    
+    if (hasNonEnglish) {
+        warning.style.display = "block";
+        btnSend.disabled = true;
+    } else {
+        warning.style.display = "none";
+        checkVaultStatus();
+    }
+}
+
+(async () => {
+    initPeerInstance();
+    document.getElementById('myIdDisplay').innerText = formatFreq(myFreq) + " MHz";
+    if(isAdmin) document.getElementById('myIdDisplay').classList.add('admin-mode');
+})();
+
+const localBus = new BroadcastChannel('morse_admin_channel');
+let vaultTargetDigits = ['', '', '', '', '']; 
+let activeSlotIndex = 0; 
+let currentPointerValue = 0; 
+let vaultAngle = 0; 
+let isCheckingPassword = false;
+let hasPrompted = false;
+
+const vaultDialEl = document.getElementById('vaultDial');
+for (let i = 0; i < 10; i++) {
+    const numEl = document.createElement('div');
+    numEl.className = 'dial-number';
+    numEl.innerText = i;
+    const angle = (i * 36) * (Math.PI / 180);
+    const radius = 70; 
+    const x = 100 + radius * Math.sin(angle) - 15;
+    const y = 100 - radius * Math.cos(angle) - 15;
+    numEl.style.left = `${x}px`;
+    numEl.style.top = `${y}px`;
+    numEl.style.transform = `rotate(${i * 36}deg)`;
+    vaultDialEl.appendChild(numEl);
+}
+
+function updateDialRotation() {
+    vaultDialEl.style.transform = `rotate(${vaultAngle}deg)`;
+    let normalizedAngle = (-vaultAngle) % 360;
+    if (normalizedAngle < 0) normalizedAngle += 360;
+    let newPointerValue = Math.round(normalizedAngle / 36) % 10;
+    if (newPointerValue !== currentPointerValue) playClickSound();
+    currentPointerValue = newPointerValue;
+    document.getElementById('pointerPreview').innerText = currentPointerValue;
+}
+
+function getAngleFromCenter(clientX, clientY) {
+    const rect = vaultDialEl.getBoundingClientRect();
+    return Math.atan2(clientX - (rect.left + rect.width/2), -(clientY - (rect.top + rect.height/2))) * (180 / Math.PI);
+}
+
+let isDragging = false; let startAngle = 0; let baseAngle = 0;
+
+vaultDialEl.addEventListener('wheel', (e) => {
+    e.preventDefault(); if (isCheckingPassword) return;
+    vaultAngle += (e.deltaY > 0 ? 1 : -1) * 5; updateDialRotation();
+}, { passive: false });
+
+function startDrag(e, clientX, clientY) {
+    if (isCheckingPassword) return;
+    isDragging = true; startAngle = getAngleFromCenter(clientX, clientY); baseAngle = vaultAngle;
+    document.body.style.cursor = 'crosshair';
+}
+function moveDrag(clientX, clientY) {
+    if (!isDragging || isCheckingPassword) return;
+    let currentAngle = getAngleFromCenter(clientX, clientY);
+    let angleDiff = currentAngle - startAngle;
+    if (angleDiff > 180) angleDiff -= 360; if (angleDiff < -180) angleDiff += 360;
+    vaultAngle = baseAngle + angleDiff; updateDialRotation();
+}
+function stopDrag() {
+    if (!isDragging) return; isDragging = false; document.body.style.cursor = 'default';
+    vaultAngle = Math.round(vaultAngle / 36) * 36; updateDialRotation();
+}
+
+vaultDialEl.addEventListener('mousedown', (e) => startDrag(e, e.clientX, e.clientY));
+window.addEventListener('mousemove', (e) => moveDrag(e.clientX, e.clientY));
+window.addEventListener('mouseup', stopDrag);
+vaultDialEl.addEventListener('touchstart', (e) => { if (e.touches.length === 1) startDrag(e, e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+window.addEventListener('touchmove', (e) => { if (isDragging && e.touches.length === 1) moveDrag(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+window.addEventListener('touchend', stopDrag);
+
+function selectSlot(index) {
+    if (isCheckingPassword || vaultTargetDigits.join('') === "OoOoO") return;
+    activeSlotIndex = index;
+    renderTargetDisplay();
+}
+
+function lockDigit() {
+    if (isCheckingPassword) return;
+    vaultTargetDigits[activeSlotIndex] = String(currentPointerValue);
+    playLockSound();
+    
+    if (activeSlotIndex < 4) {
+        activeSlotIndex++;
+    }
+    renderTargetDisplay(); checkVaultStatus();
+}
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+        e.preventDefault(); 
+        if (isCheckingPassword) return;
+        
+        const currentValue = vaultTargetDigits[activeSlotIndex];
+        
+        if (currentPointerValue === 0 || currentValue === '0' || currentValue === 'O' || currentValue === 'o') {
+            if (currentValue === '' || currentValue === '0') {
+                vaultTargetDigits[activeSlotIndex] = 'O'; 
+            } else if (currentValue === 'O') {
+                vaultTargetDigits[activeSlotIndex] = 'o'; 
+            } else if (currentValue === 'o') {
+                vaultTargetDigits[activeSlotIndex] = '0'; 
+            }
+            playLockSound();
+            renderTargetDisplay();
+            checkVaultStatus();
+        }
+    }
+});
+
+function renderTargetDisplay() {
+    const targetFreq = vaultTargetDigits.join('');
+    for (let i = 0; i < 5; i++) {
+        const el = document.getElementById(`td${i}`);
+        el.classList.remove('focused', 'filled', 'admin-filled');
+        
+        if (i === activeSlotIndex && targetFreq !== "OoOoO") {
+            el.classList.add('focused');
+        }
+
+        if (vaultTargetDigits[i] !== '') {
+            el.innerText = vaultTargetDigits[i];
+            if (targetFreq === "OoOoO" || vaultTargetDigits[i] === 'O' || vaultTargetDigits[i] === 'o') {
+                el.classList.add('admin-filled');
+            } else {
+                el.classList.add('filled');
+            }
+        } else {
+            el.innerText = '-';
+        }
+    }
+}
+
+function resetVault() {
+    vaultTargetDigits = ['', '', '', '', '']; hasPrompted = false; isCheckingPassword = false;
+    activeSlotIndex = 0;
+    renderTargetDisplay(); playResetSound(); checkVaultStatus();
+}
+
+function checkVaultStatus() {
+    const targetFreq = vaultTargetDigits.join('');
+    const log = document.getElementById('statusLog');
+    const btnSend = document.getElementById('btnSend');
+    const msgInput = document.getElementById('messageInput');
+    const vBtn = document.getElementById('vaultBtn');
+    let isFull = !vaultTargetDigits.includes('');
+    const hasNonEnglish = /[^\x00-\x7F]/.test(msgInput.value);
+
+    if (targetFreq === "OoOoO") {
+        vBtn.classList.add('admin-active');
+        if (!hasPrompted && !isAdmin && !isCheckingPassword) {
+            isCheckingPassword = true; hasPrompted = true; 
+            setTimeout(async () => {
+                const pass = prompt("🔒 OVERRIDE SYSTEM DETECTED\n管理者認証パスワードを入力してください:");
+                if (pass !== null) {
+                    const response = await VirtualAuthServer.postAuthRequest(pass);
+                    if (response.status === 200 && response.data.authenticated) {
+                        isAdmin = true; 
+                        alert("認証成功。広域傍受システムが展開されました。");
+                        document.getElementById('myIdDisplay').innerText = "OoO.oO";
+                        document.getElementById('myIdDisplay').classList.add('admin-mode');
+                        isCheckingPassword = false; 
+                        checkVaultStatus();
+                    } else {
+                        alert("パスワードが違います。アクセスを拒否しました。"); 
+                        resetVault();
+                    }
+                } else {
+                    resetVault();
+                }
+            }, 100);
+        }
+        if (isAdmin) {
+            btnSend.disabled = true; msgInput.disabled = true;
+            toggleAdminUI(true); log.style.color = "#ff3366"; log.innerText = `⚠️ OVERRIDE SUCCESS: パッシブ・ログテーブル展開。全交信を自動傍受中...`;
+            renderTargetDisplay();
+        }
+    } else {
+        vBtn.classList.remove('admin-active');
+        if (!isAdminParam) toggleAdminUI(false);
+        msgInput.disabled = false;
+
+        if (isFull && !hasNonEnglish) {
+            btnSend.disabled = false;
+            log.style.color = "#00ffcc"; log.innerText = `📡 同調完了: [ ${formatFreq(targetFreq)} MHz ] 送信準備よし`;
+        } else {
+            btnSend.disabled = true;
+            log.style.color = "#8b949e"; log.innerText = isFull ? `> 英文を入力すると電波を送信できます...` : `> 残り ${vaultTargetDigits.filter(x=>x==='').length} 桁の設定が必要です...`;
+        }
+    }
+}
+
+let audioCtx = null;
+function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+function playClickSound() {
+    initAudio(); const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+    osc.type = 'triangle'; osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.03, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.04);
+    osc.connect(gain); gain.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.04);
+}
+function playLockSound() {
+    initAudio(); const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+    osc.type = 'sine'; osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.08, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+    osc.connect(gain); gain.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+}
+function playResetSound() {
+    initAudio(); const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.04, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+    osc.connect(gain); gain.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+}
+function playIncomingBeep(isIntercept) {
+    initAudio(); const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+    osc.type = 'sine'; osc.frequency.setValueAtTime(isIntercept ? 350 : 600, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.05, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+    osc.connect(gain); gain.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+}
+
+localBus.onmessage = (event) => {
+    const data = event.data; if (!data) return;
+    if (isAdmin || vaultTargetDigits.join('') === "OoOoO") { if (data.isIntercept) processIncomingData(data); }
+    else { if (!data.isIntercept && data.to === myFreq) processIncomingData(data); }
+};
+
+function processIncomingData(data) {
+    if (!data || !data.message) return;
+    const rxBox = document.getElementById('rxBox');
+    if (data.isIntercept || isAdmin || vaultTargetDigits.join('') === "OoOoO") {
+        rxBox.classList.add('admin-intercept'); setTimeout(() => rxBox.classList.remove('admin-intercept'), 1500);
+        document.getElementById('rxTitle').innerText = "⚡ [ GLOBAL INTERCEPT FEEDS ]";
+        document.getElementById('rxStatus').innerText = `🕵️ 通信傍受 -> [${formatFreq(data.from)} MHz] ➔ [${formatFreq(data.to)} MHz]`;
+        document.getElementById('rxStatus').style.color = "#ff3366";
+        addLogToTable(data.from, data.to, data.message);
+    } else if (data.to === myFreq) {
+        rxBox.classList.add('receiving'); setTimeout(() => rxBox.classList.remove('receiving'), 1000);
+        document.getElementById('rxTitle').innerText = "[ RECEIVER MONITOR ]";
+        document.getElementById('rxStatus').innerText = `🎵 Freq:${formatFreq(data.from)} MHz からシグナル受信...`;
+        document.getElementById('rxStatus').style.color = "#50fa7b";
+    }
+    if (data.to === myFreq || data.isIntercept || isAdmin || vaultTargetDigits.join('') === "OoOoO") {
+        document.getElementById('rxMessage').innerText = data.message;
+        playIncomingBeep(data.isIntercept || isAdmin || vaultTargetDigits.join('') === "OoOoO");
+    }
+}
+
+function addLogToTable(from, to, text) {
+    const tbody = document.getElementById('adminLogBody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><span class="tag-route">${formatFreq(from)} ➔ ${formatFreq(to)}</span></td><td><strong style="color: #fff; font-size:13px;">${text}</strong></td>`;
+    tbody.insertBefore(tr, tbody.firstChild);
+}
+
+function toggleAdminUI(show) {
+    const body = document.body; const adminPanel = document.getElementById('adminPanel');
+    if (show) { body.classList.add('admin-layout'); adminPanel.classList.add('show'); } 
+    else { body.classList.remove('admin-layout'); adminPanel.classList.remove('show'); }
+}
+
+function transmitMessage() {
+    const msgInput = document.getElementById('messageInput');
+    const text = msgInput.value.trim();
+    const targetFreq = vaultTargetDigits.join('');
+    if (text.length === 0 || vaultTargetDigits.includes('') || targetFreq === "OoOoO" || isCheckingPassword) return;
+
+    const packetNormal = { from: myFreq, to: targetFreq, message: text, isIntercept: false };
+    const packetIntercept = { from: myFreq, to: targetFreq, message: text, isIntercept: true };
+
+    localBus.postMessage(packetNormal); localBus.postMessage(packetIntercept);
+
+    if (peer && !peer.destroyed) {
+        const conn = peer.connect(`morse-freq-${targetFreq}`);
+        conn.on('open', () => { conn.send(packetNormal); });
+    }
+    
+    document.getElementById('statusLog').style.color = "#00ffcc";
+    document.getElementById('statusLog').innerText = `⚡ 送信完了: Freq ${formatFreq(targetFreq)} MHz への電波送出に成功。`;
+    msgInput.value = "";
+}
+
+updateDialRotation(); selectSlot(0); checkVaultStatus();
+</script>
+</body>
+</html>
